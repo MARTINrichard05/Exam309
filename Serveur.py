@@ -4,7 +4,7 @@ import socket
 import sys
 import time
 
-# github :
+# github : https://github.com/MARTINrichard05/Exam309
 
 class Server:
     def __init__(self, address : str ="0.0.0.0", port : int = 4200, max_clients : int = 5): # le port que M.Drouhin a choisi
