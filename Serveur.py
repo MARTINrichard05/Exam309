@@ -4,6 +4,7 @@ import socket
 import sys
 import time
 
+# github :
 
 class Server:
     def __init__(self, address : str ="0.0.0.0", port : int = 4200, max_clients : int = 5): # le port que M.Drouhin a choisi
@@ -21,7 +22,7 @@ class Server:
 
     def __log(self, msg):
         self.__msg_buffer.append(msg)
-        print(msg)
+        # print(msg)
         
         
 
@@ -39,7 +40,7 @@ class Server:
                 try:
                     msg = client.recv(1024)
                     if msg:
-                        self.__log(msg.decode())
+                        self.__log(f"Message > {msg.decode()}")
                         if msg.decode() == "deco-server":
                             self.__clients.remove(client)
                             client.close()
@@ -86,7 +87,10 @@ class Server:
 
     def __start_listener(self):
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.__socket.bind((self.__address, self.__port))
+        try :
+            self.__socket.bind((self.__address, self.__port))
+        except OSError:
+            self.__log("Addresse déja utilisée, veuillez changer le port ou l'addresse et réessayer")
         self.__socket.listen()
         self.__listen_for_new_clients()
 
