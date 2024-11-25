@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QApplication, QWidget, QGridLayout, QLabel, QLineEdit, QPushButton
+from PyQt6.QtWidgets import QApplication, QWidget, QGridLayout, QLabel, QLineEdit, QPushButton, QTextEdit
 from threading import Thread
 import socket
 import sys
@@ -14,8 +14,16 @@ class Server:
 
         self.__ClientlistenerThread = None
         self.__MsglistenerThread = None
+        
+        self.__msg_buffer = []
 
         self.__running = False
+
+    def __log(self, msg):
+        self.__msg_buffer.append(msg)
+        print(msg)
+        
+        
 
     def start(self):
         self.__ClientlistenerThread = Thread(target=self.__startup)
@@ -31,27 +39,39 @@ class Server:
                 try:
                     msg = client.recv(1024)
                     if msg:
-                        print(msg)
+                        self.__log(msg.decode())
+                        if msg.decode() == "deco-server":
+                            self.__clients.remove(client)
+                            client.close()
+                            self.__log("Client disconnected")
                 except BlockingIOError:
                     pass
                 except ConnectionResetError:
-                    print("Client disconnected")
+                    self.__log("Client disconnected")
                     self.__clients.remove(client)
                     client.close()
 
 
     def stop(self):
+        self.__log("Stopping server")
         self.__running = False
+        self.__log("Waiting for message listener to stop")
+        self.__MsglistenerThread.join()
+        self.__log("Message listener stopped")
+        self.__log("Closing clients")
+        for client in self.__clients:
+            client.close()
+            self.__log("Client Deleted")
         try :
             self.__socket.shutdown(socket.SHUT_RDWR)
             self.__socket.close()
         except OSError:
             pass # Le socket à crashé, donc est fermé
-        self.__ClientlistenerThread.join()
-        print("Server stopped")
+        # self.__ClientlistenerThread.join()
+        self.__log("Server stopped")
 
     def __listen_for_new_clients(self):
-        print("Listening for new clients")
+        self.__log("Listening for new clients")
         while self.running:
             if len(self.__clients) >= self.__max_clients:
                 time.sleep(0.02)
@@ -62,7 +82,7 @@ class Server:
                 continue
             client.setblocking(False)
             self.__clients.append(client)
-            print(f"New client: {addr}")
+            self.__log(f"New client: {addr}")
 
     def __start_listener(self):
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -73,6 +93,11 @@ class Server:
     def __startup(self):
         self.__start_listener()
         self.__socket.close()
+
+    def last_msg(self):
+        if self.__msg_buffer:
+            return self.__msg_buffer.pop(0)
+        return None
 
 
 
@@ -102,6 +127,8 @@ class Server:
     def max_clients(self, value : int):
         self.__max_clients = value
 
+        
+
 class App:
     def __init__(self):
         self.__server = Server()
@@ -112,10 +139,20 @@ class App:
         self.__grid = QGridLayout()
         self.__root.setLayout(self.__grid)
         self.__initWidgets()
+        self.__logsThread = Thread(target=self.loop)
+        self.running = True
 
     def run(self):
         self.__root.show()
-        sys.exit(self.__app.exec())
+        self.__logsThread.start()
+        code = self.__app.exec()
+        self.running = False
+        self.__logsThread.join()
+        sys.exit(code)
+
+
+    def __log(self, msg):
+        self.__logs.append(str(msg))
 
     def __initWidgets(self):
         self.__portline = QLineEdit()
@@ -127,6 +164,10 @@ class App:
         self.__maxclientsline = QLineEdit()
         self.__maxclientsline.setText("5")
 
+        self.__logs = QTextEdit()
+        self.__logs.setReadOnly(True)
+
+
         self.__startstop = QPushButton("Démmarrage du serveur")
         self.__startstop.clicked.connect(self.startstop)
 
@@ -136,7 +177,11 @@ class App:
         self.__grid.addWidget(QLabel("Address:"), 1, 0)
         self.__grid.addWidget(self.__addressline, 1, 1)
 
-        self.__grid.addWidget(self.__startstop, 2, 0, 1, 2)
+        self.__grid.addWidget(QLabel("Max clients:"), 2, 0)
+        self.__grid.addWidget(self.__maxclientsline, 2, 1)
+
+        self.__grid.addWidget(self.__startstop, 3, 0, 1, 2)
+        self.__grid.addWidget(self.__logs, 4, 0, 1, 2)
 
     def __refresh_server_params(self):
         self.__server.address = self.__addressline.text()
@@ -153,16 +198,32 @@ class App:
             self.__maxclientsline.setText("5")
             self.__server.max_clients = 5
 
+    def __refresh_logs(self):
+        msg = self.__server.last_msg()
+        if msg:
+            self.__logs.append(msg)
+
+    def loop(self):
+        while self.running:
+            self.__refresh_logs()
+            self.__app.processEvents()
+
+
 
     def startstop(self):
         if self.__server.running:
+            self.__log("On demande au serveur de s'arrêter")
             self.__server.stop()
             self.__startstop.setText("Démmarrage du serveur")
+            self.__server = Server()
 
         else:
             self.__refresh_server_params()
             self.__server.start()
             self.__startstop.setText("Arrêt du serveur")
+            self.__log("Serveur démarré")
+
+
 
 
 
